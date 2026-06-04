@@ -1,0 +1,381 @@
+// Prisma Schema para TaxiBot CRM
+// PostgreSQL + Redis
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USUARIOS (Clientes y Conductores)
+// ============================================
+
+enum TipoUsuario {
+  CLIENTE
+  CONDUCTOR
+}
+
+enum EstadoConductor {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  SUSPENDIDO
+  BLOQUEADO
+}
+
+model Usuario {
+  id                String            @id @default(cuid())
+  telefono          String            @unique
+  nombre            String
+  email             String?
+  fotoUrl           String?
+  tipo              TipoUsuario
+  
+  // Solo para clientes
+  bloqueado         Boolean           @default(false)
+  deudaPendiente    Decimal           @default(0) @db.Decimal(10, 2)
+  creditos          Decimal           @default(0) @db.Decimal(10, 2)
+  codigoReferido    String?           @unique
+  referidoPorId     String?
+  referidoPor       Usuario?          @relation("Referidos", fields: [referidoPorId], references: [id])
+  referidos         Usuario[]         @relation("Referidos")
+  
+  // Solo para conductores
+  datoConductor     DatoConductor?
+  
+  // Relaciones
+  carrerasCliente   Carrera[]         @relation("CarrerasCliente")
+  carrerasConductor Carrera[]         @relation("CarrerasConductor")
+  calificacionesDadas    Calificacion[] @relation("CalificacionesUsuario")
+  calificacionesRecibidas Calificacion[] @relation("CalificacionesConductor")
+  incidentesReportados   Incidente[]   @relation("IncidentesUsuario")
+  incidentesRecibidos    Incidente[]   @relation("IncidentesConductor")
+  pagos             Pago[]
+  
+  fechaRegistro     DateTime          @default(now())
+  ultimaActividad   DateTime          @default(now())
+  
+  @@index([telefono])
+  @@index([tipo])
+}
+
+model DatoConductor {
+  id                String            @id @default(cuid())
+  usuarioId         String            @unique
+  usuario           Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  cedula            String            @unique
+  licencia          String
+  placa             String            @unique
+  
+  fotosConductor    String?           // URL foto conductor
+  fotosVehiculo     String?           // URL foto vehículo
+  fotosMatricula    String?           // URL matrícula
+  
+  estado            EstadoConductor   @default(PENDIENTE)
+  motivoRechazo     String?
+  
+  ratingPromedio    Decimal           @default(0) @db.Decimal(3, 2)
+  totalViajes       Int               @default(0)
+  
+  gpsActivo         Boolean           @default(false)
+  ubicacionLat      Decimal?          @db.Decimal(10, 8)
+  ubicacionLng      Decimal?          @db.Decimal(11, 8)
+  ubicacionTimestamp DateTime?
+  
+  disponible        Boolean           @default(false)
+  
+  // Relaciones
+  sanciones         Sancion[]
+  
+  @@index([estado])
+  @@index([disponible])
+}
+
+// ============================================
+// CARRERAS (Viajes)
+// ============================================
+
+enum EstadoCarrera {
+  BUSCANDO
+  ASIGNADA
+  CONDUCTOR_LLEGO
+  EN_CURSO
+  COMPLETADA
+  CANCELADA
+}
+
+model Carrera {
+  id                String            @id @default(cuid())
+  
+  usuarioId         String
+  usuario           Usuario           @relation("CarrerasCliente", fields: [usuarioId], references: [id])
+  
+  conductorId       String?
+  conductor         Usuario?          @relation("CarrerasConductor", fields: [conductorId], references: [id])
+  
+  // Ubicaciones
+  origenLat         Decimal           @db.Decimal(10, 8)
+  origenLng         Decimal           @db.Decimal(11, 8)
+  origenDireccion   String
+  
+  destinoLat        Decimal           @db.Decimal(10, 8)
+  destinoLng        Decimal           @db.Decimal(11, 8)
+  destinoDireccion  String
+  
+  // Datos del viaje
+  distanciaKm       Decimal           @db.Decimal(10, 2)
+  costoEstimado     Decimal           @db.Decimal(10, 2)
+  costoFinal        Decimal?          @db.Decimal(10, 2)
+  
+  estado            EstadoCarrera     @default(BUSCANDO)
+  
+  // Timestamps
+  fechaSolicitud    DateTime          @default(now())
+  fechaAsignacion   DateTime?
+  fechaInicio       DateTime?
+  fechaFin          DateTime?
+  
+  // Otros
+  pagado            Boolean           @default(false)
+  compartidoCon     String[]          @default([])
+  motivoCancelacion String?
+  
+  // Relaciones
+  estadosHistorial  EstadoCarreraHistorial[]
+  calificaciones    Calificacion[]
+  incidentes        Incidente[]
+  pago              Pago?
+  
+  @@index([usuarioId])
+  @@index([conductorId])
+  @@index([estado])
+  @@index([fechaSolicitud])
+}
+
+model EstadoCarreraHistorial {
+  id          String        @id @default(cuid())
+  carreraId   String
+  carrera     Carrera       @relation(fields: [carreraId], references: [id], onDelete: Cascade)
+  
+  estado      EstadoCarrera
+  timestamp   DateTime      @default(now())
+  
+  @@index([carreraId])
+}
+
+// ============================================
+// PAGOS
+// ============================================
+
+enum EstadoPago {
+  PENDIENTE
+  PROCESANDO
+  EXITOSO
+  FALLIDO
+  REEMBOLSADO
+}
+
+enum MetodoPago {
+  TARJETA
+  TRANSFERENCIA
+}
+
+model Pago {
+  id                String      @id @default(cuid())
+  
+  carreraId         String      @unique
+  carrera           Carrera     @relation(fields: [carreraId], references: [id])
+  
+  usuarioId         String
+  usuario           Usuario     @relation(fields: [usuarioId], references: [id])
+  
+  monto             Decimal     @db.Decimal(10, 2)
+  metodo            MetodoPago
+  
+  estado            EstadoPago  @default(PENDIENTE)
+  
+  // Integración Deuna
+  deunaTransactionId String?   @unique
+  deunaLink         String?
+  
+  intentos          Int         @default(0)
+  error             String?
+  
+  fechaCreacion     DateTime    @default(now())
+  fechaConfirmacion DateTime?
+  
+  @@index([usuarioId])
+  @@index([estado])
+  @@index([fechaCreacion])
+}
+
+// ============================================
+// CALIFICACIONES
+// ============================================
+
+model Calificacion {
+  id          String   @id @default(cuid())
+  
+  carreraId   String
+  carrera     Carrera  @relation(fields: [carreraId], references: [id])
+  
+  usuarioId   String
+  usuario     Usuario  @relation("CalificacionesUsuario", fields: [usuarioId], references: [id])
+  
+  conductorId String
+  conductor   Usuario  @relation("CalificacionesConductor", fields: [conductorId], references: [id])
+  
+  rating      Int      // 1-5
+  comentario  String?  @db.Text
+  
+  fecha       DateTime @default(now())
+  
+  @@index([carreraId])
+  @@index([conductorId])
+}
+
+// ============================================
+// INCIDENTES
+// ============================================
+
+enum TipoIncidente {
+  PROBLEMA_CONDUCTOR
+  RUTA_INCORRECTA
+  COBRO_INDEBIDO
+  ACCIDENTE
+  EMERGENCIA
+  OTRO
+}
+
+enum EstadoIncidente {
+  ABIERTO
+  EN_REVISION
+  RESUELTO
+  CERRADO
+}
+
+model Incidente {
+  id              String          @id @default(cuid())
+  
+  carreraId       String
+  carrera         Carrera         @relation(fields: [carreraId], references: [id])
+  
+  usuarioId       String
+  usuario         Usuario         @relation("IncidentesUsuario", fields: [usuarioId], references: [id])
+  
+  conductorId     String?
+  conductor       Usuario?        @relation("IncidentesConductor", fields: [conductorId], references: [id])
+  
+  tipo            TipoIncidente
+  descripcion     String          @db.Text
+  evidenciaUrls   String[]        @default([])
+  
+  estado          EstadoIncidente @default(ABIERTO)
+  resolucion      String?         @db.Text
+  resueltoPorId   String?
+  
+  fechaCreacion   DateTime        @default(now())
+  fechaResolucion DateTime?
+  
+  @@index([estado])
+  @@index([tipo])
+  @@index([fechaCreacion])
+}
+
+// ============================================
+// SANCIONES
+// ============================================
+
+enum TipoSancion {
+  GPS_APAGADO
+  CANCELACION_FRECUENTE
+  BAJA_CALIFICACION
+  DENUNCIA_GRAVE
+  OTRO
+}
+
+model Sancion {
+  id              String         @id @default(cuid())
+  
+  conductorId     String
+  conductor       DatoConductor  @relation(fields: [conductorId], references: [id], onDelete: Cascade)
+  
+  tipo            TipoSancion
+  descripcion     String         @db.Text
+  duracionHoras   Int
+  
+  activa          Boolean        @default(true)
+  
+  fechaInicio     DateTime       @default(now())
+  fechaFin        DateTime
+  
+  @@index([conductorId])
+  @@index([activa])
+}
+
+// ============================================
+// ADMINISTRADORES PMA
+// ============================================
+
+enum RolPMA {
+  ADMIN
+  SOPORTE
+  REVISOR
+}
+
+model AdminPMA {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  nombre      String
+  password    String   // Hash bcrypt
+  rol         RolPMA   @default(SOPORTE)
+  activo      Boolean  @default(true)
+  
+  fechaCreacion DateTime @default(now())
+  
+  @@index([email])
+}
+
+// ============================================
+// LOGS DE AUDITORÍA
+// ============================================
+
+enum TipoAccionAuditoria {
+  APROBAR_CONDUCTOR
+  RECHAZAR_CONDUCTOR
+  BLOQUEAR_CONDUCTOR
+  DESBLOQUEAR_USUARIO
+  REEMBOLSAR_PAGO
+  CANCELAR_CARRERA
+  RESOLVER_INCIDENTE
+  APLICAR_SANCION
+  EMERGENCIA_ALERTADA
+  OTRO
+}
+
+model LogAuditoria {
+  id          String              @id @default(cuid())
+  
+  adminId     String?
+  accion      TipoAccionAuditoria
+  descripcion String              @db.Text
+  
+  // Metadata
+  usuarioAfectadoId   String?
+  conductorAfectadoId String?
+  carreraId           String?
+  incidenteId         String?
+  
+  metadataJson String?           @db.Text // JSON adicional
+  
+  timestamp   DateTime            @default(now())
+  
+  @@index([accion])
+  @@index([timestamp])
+  @@index([adminId])
+}
