@@ -1,4 +1,4 @@
-# Dockerfile simplificado para TaxiBot CRM
+# Dockerfile para TaxiBot CRM
 FROM node:20-alpine
 
 WORKDIR /app
@@ -30,5 +30,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NODE_ENV=production
 
-# Comando de inicio (con migraciones)
-CMD npx prisma migrate deploy && npm start
+# Solo iniciar la aplicación (sin migraciones automáticas)
+CMD npm start
