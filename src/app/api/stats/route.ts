@@ -1,21 +1,24 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { cacheGet, cacheSet } from '@/lib/redis'
-import { DashboardStats } from '@/types'
 
-const CACHE_TTL = 60 // 1 minuto
+const EMPTY_STATS = {
+  carrerasHoy: 0,
+  carrerasSemana: 0,
+  carrerasMes: 0,
+  ingresosHoy: 0,
+  ingresosSemana: 0,
+  ingresosMes: 0,
+  conductoresActivos: 0,
+  conductoresDisponibles: 0,
+  incidentesAbiertos: 0,
+  emergenciasActivas: 0,
+  pagoPendiente: 0,
+}
 
 export async function GET() {
   try {
-    // Intentar obtener de cache (no crítico si falla)
-    try {
-      const cached = await cacheGet<DashboardStats>('dashboard:stats')
-      if (cached) {
-        return NextResponse.json(cached)
-      }
-    } catch (cacheError) {
-      console.warn('Redis cache error, continuing without cache:', cacheError)
-    }
+    // Test database connection first
+    await prisma.$queryRaw`SELECT 1`
 
     const now = new Date()
     const inicioHoy = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -25,38 +28,23 @@ export async function GET() {
 
     // Carreras
     const [carrerasHoy, carrerasSemana, carrerasMes] = await Promise.all([
-      prisma.carrera.count({
-        where: { fechaSolicitud: { gte: inicioHoy } }
-      }),
-      prisma.carrera.count({
-        where: { fechaSolicitud: { gte: inicioSemana } }
-      }),
-      prisma.carrera.count({
-        where: { fechaSolicitud: { gte: inicioMes } }
-      }),
+      prisma.carrera.count({ where: { fechaSolicitud: { gte: inicioHoy } } }),
+      prisma.carrera.count({ where: { fechaSolicitud: { gte: inicioSemana } } }),
+      prisma.carrera.count({ where: { fechaSolicitud: { gte: inicioMes } } }),
     ])
 
-    // Ingresos (pagos exitosos)
+    // Ingresos
     const [pagosHoy, pagosSemana, pagosMes] = await Promise.all([
       prisma.pago.aggregate({
-        where: {
-          estado: 'EXITOSO',
-          fechaConfirmacion: { gte: inicioHoy }
-        },
+        where: { estado: 'EXITOSO', fechaConfirmacion: { gte: inicioHoy } },
         _sum: { monto: true }
       }),
       prisma.pago.aggregate({
-        where: {
-          estado: 'EXITOSO',
-          fechaConfirmacion: { gte: inicioSemana }
-        },
+        where: { estado: 'EXITOSO', fechaConfirmacion: { gte: inicioSemana } },
         _sum: { monto: true }
       }),
       prisma.pago.aggregate({
-        where: {
-          estado: 'EXITOSO',
-          fechaConfirmacion: { gte: inicioMes }
-        },
+        where: { estado: 'EXITOSO', fechaConfirmacion: { gte: inicioMes } },
         _sum: { monto: true }
       }),
     ])
@@ -64,32 +52,20 @@ export async function GET() {
     // Conductores
     const [conductoresActivos, conductoresDisponibles] = await Promise.all([
       prisma.datoConductor.count({
-        where: {
-          estado: 'APROBADO',
-          gpsActivo: true
-        }
+        where: { estado: 'APROBADO', gpsActivo: true }
       }),
       prisma.datoConductor.count({
-        where: {
-          estado: 'APROBADO',
-          disponible: true,
-          gpsActivo: true
-        }
+        where: { estado: 'APROBADO', disponible: true, gpsActivo: true }
       }),
     ])
 
-    // Incidentes y emergencias
+    // Incidentes
     const [incidentesAbiertos, emergenciasActivas] = await Promise.all([
       prisma.incidente.count({
-        where: {
-          estado: { in: ['ABIERTO', 'EN_REVISION'] }
-        }
+        where: { estado: { in: ['ABIERTO', 'EN_REVISION'] } }
       }),
       prisma.incidente.count({
-        where: {
-          tipo: 'EMERGENCIA',
-          estado: { in: ['ABIERTO', 'EN_REVISION'] }
-        }
+        where: { tipo: 'EMERGENCIA', estado: { in: ['ABIERTO', 'EN_REVISION'] } }
       }),
     ])
 
@@ -99,7 +75,7 @@ export async function GET() {
       _sum: { monto: true }
     })
 
-    const stats: DashboardStats = {
+    const stats = {
       carrerasHoy,
       carrerasSemana,
       carrerasMes,
@@ -113,19 +89,14 @@ export async function GET() {
       pagoPendiente: Number(pagoPendienteAgg._sum.monto || 0),
     }
 
-    // Guardar en cache (no crítico si falla)
-    try {
-      await cacheSet('dashboard:stats', stats, CACHE_TTL)
-    } catch (cacheError) {
-      console.warn('Failed to cache stats:', cacheError)
-    }
-
     return NextResponse.json(stats)
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Error al obtener estadísticas' },
-      { status: 500 }
-    )
+    console.error('Database error:', error)
+    
+    // Return empty stats instead of error to allow UI to load
+    return NextResponse.json({
+      ...EMPTY_STATS,
+      error: 'Base de datos no disponible. Mostrando datos de ejemplo.'
+    })
   }
 }
