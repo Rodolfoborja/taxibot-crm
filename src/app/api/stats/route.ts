@@ -7,10 +7,14 @@ const CACHE_TTL = 60 // 1 minuto
 
 export async function GET() {
   try {
-    // Intentar obtener de cache
-    const cached = await cacheGet<DashboardStats>('dashboard:stats')
-    if (cached) {
-      return NextResponse.json(cached)
+    // Intentar obtener de cache (no crítico si falla)
+    try {
+      const cached = await cacheGet<DashboardStats>('dashboard:stats')
+      if (cached) {
+        return NextResponse.json(cached)
+      }
+    } catch (cacheError) {
+      console.warn('Redis cache error, continuing without cache:', cacheError)
     }
 
     const now = new Date()
@@ -109,14 +113,18 @@ export async function GET() {
       pagoPendiente: Number(pagoPendienteAgg._sum.monto || 0),
     }
 
-    // Guardar en cache
-    await cacheSet('dashboard:stats', stats, CACHE_TTL)
+    // Guardar en cache (no crítico si falla)
+    try {
+      await cacheSet('dashboard:stats', stats, CACHE_TTL)
+    } catch (cacheError) {
+      console.warn('Failed to cache stats:', cacheError)
+    }
 
     return NextResponse.json(stats)
   } catch (error) {
     console.error('Error fetching dashboard stats:', error)
     return NextResponse.json(
-      { error: 'Error al obtener estadísticas' },
+      { error: error instanceof Error ? error.message : 'Error al obtener estadísticas' },
       { status: 500 }
     )
   }
