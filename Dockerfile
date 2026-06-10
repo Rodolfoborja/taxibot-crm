@@ -23,6 +23,10 @@ RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# Copiar script de migraciones
+COPY migrate.sh ./
+RUN chmod +x migrate.sh
+
 # Exponer puerto
 EXPOSE 3000
 
@@ -30,5 +34,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NODE_ENV=production
 
-# Solo iniciar la aplicación (sin migraciones automáticas)
-CMD npm start
+# Ejecutar migraciones y luego iniciar app
+CMD ["sh", "./migrate.sh"]
