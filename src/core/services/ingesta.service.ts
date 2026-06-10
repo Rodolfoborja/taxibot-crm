@@ -83,17 +83,36 @@ async function ingestarUbicacion(
     throw new Error(`No existe un conductor con teléfono ${data.telefonoConductor}.`)
   }
 
-  await prisma.datoConductor.update({
-    where: { id: conductor.datoConductor.id },
-    data: {
-      ubicacionLat: data.lat,
-      ubicacionLng: data.lng,
-      ubicacionTimestamp: new Date(),
-      gpsActivo: true,
-      ...(data.disponible !== undefined ? { disponible: data.disponible } : {}),
-    },
+  const conductorId = conductor.datoConductor.id
+
+  // Carrera activa del conductor (para asociar el punto a su trayectoria)
+  const carreraActiva = await prisma.carrera.findFirst({
+    where: { conductorId: conductor.id, estado: { in: ['ASIGNADA', 'CONDUCTOR_LLEGO', 'EN_CURSO'] } },
+    select: { id: true },
+    orderBy: { fechaSolicitud: 'desc' },
   })
-  return { recursoId: conductor.datoConductor.id, mensaje: 'Ubicación GPS actualizada.' }
+
+  await prisma.$transaction([
+    prisma.datoConductor.update({
+      where: { id: conductorId },
+      data: {
+        ubicacionLat: data.lat,
+        ubicacionLng: data.lng,
+        ubicacionTimestamp: new Date(),
+        gpsActivo: true,
+        ...(data.disponible !== undefined ? { disponible: data.disponible } : {}),
+      },
+    }),
+    prisma.ubicacionHistorial.create({
+      data: {
+        conductorId,
+        carreraId: carreraActiva?.id ?? null,
+        lat: data.lat,
+        lng: data.lng,
+      },
+    }),
+  ])
+  return { recursoId: conductorId, mensaje: 'Ubicación GPS actualizada.' }
 }
 
 async function ingestarIncidente(

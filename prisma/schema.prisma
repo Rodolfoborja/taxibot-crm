@@ -90,8 +90,9 @@ model DatoConductor {
   disponible        Boolean           @default(false)
   
   // Relaciones
-  sanciones         Sancion[]
-  
+  sanciones           Sancion[]
+  ubicacionesHistorial UbicacionHistorial[]
+
   @@index([estado])
   @@index([disponible])
 }
@@ -150,6 +151,8 @@ model Carrera {
   calificaciones    Calificacion[]
   incidentes        Incidente[]
   pago              Pago?
+  ubicacionesHistorial UbicacionHistorial[]
+  mensajes          Mensaje[]
   
   @@index([usuarioId])
   @@index([conductorId])
@@ -398,6 +401,72 @@ model EventoIngesta {
   @@index([tipo])
   @@index([timestamp])
   @@index([procesado])
+}
+
+// ============================================
+// HISTORIAL DE UBICACIONES (trayectorias GPS)
+// ============================================
+// Cada ping GPS de un conductor. Permite dibujar la trayectoria en tiempo real.
+
+model UbicacionHistorial {
+  id            String        @id @default(cuid())
+
+  conductorId   String
+  conductor     DatoConductor @relation(fields: [conductorId], references: [id], onDelete: Cascade)
+
+  carreraId     String?
+  carrera       Carrera?      @relation(fields: [carreraId], references: [id])
+
+  lat           Decimal       @db.Decimal(10, 8)
+  lng           Decimal       @db.Decimal(11, 8)
+  velocidadKmh  Decimal?      @db.Decimal(6, 2)
+
+  timestamp     DateTime      @default(now())
+
+  @@index([conductorId, timestamp])
+  @@index([carreraId, timestamp])
+}
+
+// ============================================
+// MENSAJES (comunicación con conductor / cliente)
+// ============================================
+
+enum DireccionMensaje {
+  ENTRANTE  // del usuario hacia el CRM
+  SALIENTE  // del CRM/PMA hacia el usuario
+}
+
+enum CanalMensaje {
+  WHATSAPP
+  INTERNO
+}
+
+enum EstadoMensaje {
+  PENDIENTE
+  ENVIADO
+  ENTREGADO
+  FALLIDO
+}
+
+model Mensaje {
+  id            String           @id @default(cuid())
+
+  carreraId     String?
+  carrera       Carrera?         @relation(fields: [carreraId], references: [id])
+
+  telefono      String           // destinatario / remitente
+  nombre        String?
+  direccion     DireccionMensaje @default(SALIENTE)
+  canal         CanalMensaje     @default(WHATSAPP)
+  texto         String           @db.Text
+  estado        EstadoMensaje    @default(PENDIENTE)
+  error         String?
+
+  adminId       String?          // operador PMA que lo envió
+  timestamp     DateTime         @default(now())
+
+  @@index([carreraId, timestamp])
+  @@index([telefono, timestamp])
 }
 
 // ============================================

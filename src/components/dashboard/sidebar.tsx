@@ -2,19 +2,23 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 import {
   LayoutDashboard,
+  Radio,
   Car,
   Users,
   Contact,
   AlertTriangle,
   CreditCard,
   KeyRound,
+  DatabaseZap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/monitor', label: 'Monitor en vivo', icon: Radio },
   { href: '/carreras', label: 'Carreras', icon: Car },
   { href: '/conductores', label: 'Conductores', icon: Contact },
   { href: '/usuarios', label: 'Usuarios', icon: Users },
@@ -25,6 +29,21 @@ const nav = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [seedeando, setSeedeando] = useState(false)
+
+  async function cargarDemo() {
+    if (!confirm('¿Cargar datos de demostración? (limpia y recrea los datos demo)')) return
+    setSeedeando(true)
+    const res = await fetch('/api/admin/seed-demo', { method: 'POST' })
+    setSeedeando(false)
+    if (res.ok) {
+      const d = await res.json()
+      alert(`Datos demo cargados: ${d.conductores} conductores, ${d.carrerasActivas} carreras activas.`)
+      window.location.reload()
+    } else {
+      alert('No se pudieron cargar los datos demo.')
+    }
+  }
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r bg-white md:flex">
@@ -56,7 +75,17 @@ export function Sidebar() {
           )
         })}
       </nav>
-      <div className="border-t p-4 text-xs text-gray-400">TaxiBot CRM v2.0</div>
+      <div className="space-y-2 border-t p-3">
+        <button
+          onClick={cargarDemo}
+          disabled={seedeando}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+        >
+          <DatabaseZap className="h-4 w-4" />
+          {seedeando ? 'Cargando…' : 'Cargar datos demo'}
+        </button>
+        <p className="px-3 text-xs text-gray-400">TaxiBot CRM v2.0</p>
+      </div>
     </aside>
   )
 }
