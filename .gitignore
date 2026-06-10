@@ -28,6 +28,11 @@ yarn-error.log*
 .env*.local
 .env.production
 
+# Secrets / credenciales (NUNCA commitear)
+DOKPLOY_CREDENTIALS.md
+*credentials*.md
+*.secret
+
 # Vercel
 .vercel
 

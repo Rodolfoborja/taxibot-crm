@@ -7,12 +7,20 @@ const globalForRedis = globalThis as unknown as {
 export const redis =
   globalForRedis.redis ??
   new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    maxRetriesPerRequest: 3,
-    retryStrategy: (times) => {
-      const delay = Math.min(times * 50, 2000)
-      return delay
-    },
+    // Conexión perezosa: no abre el socket hasta el primer comando.
+    // Evita el ruido de ECONNREFUSED en build/arranque si Redis no está listo.
+    lazyConnect: true,
+    maxRetriesPerRequest: 2,
+    enableOfflineQueue: false,
+    retryStrategy: (times) => Math.min(times * 50, 2000),
   })
+
+// Redis es opcional (caché, no crítico): no debe tumbar el proceso.
+redis.on('error', (err) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[redis] no disponible:', err.message)
+  }
+})
 
 if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis
 

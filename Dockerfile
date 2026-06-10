@@ -30,6 +30,9 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NODE_ENV=production
 
-# Iniciar aplicación directamente
-# Las migraciones deben ejecutarse manualmente la primera vez
-CMD ["npm", "start"]
+# Sincronizar el esquema y arrancar.
+# `db push` es idempotente y no destructivo para cambios aditivos: crea las
+# tablas/columnas que falten (incl. ApiKey y EventoIngesta) sin depender del
+# estado del historial de migraciones. Si falla, el contenedor no arranca
+# (no deja la BD a medias).
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npm start"]

@@ -335,10 +335,69 @@ model AdminPMA {
   password    String   // Hash bcrypt
   rol         RolPMA   @default(SOPORTE)
   activo      Boolean  @default(true)
-  
+
   fechaCreacion DateTime @default(now())
-  
+
+  // Relaciones
+  apiKeysCreadas ApiKey[]
+
   @@index([email])
+}
+
+// ============================================
+// API KEYS (Integración Jelou/Bot → CRM)
+// ============================================
+// Tokens para que sistemas externos (el bot de WhatsApp en Jelou)
+// envíen datos al CRM y ejecuten acciones PMA de forma autenticada.
+
+enum ApiKeyScope {
+  INGEST          // Enviar datos (carreras, usuarios, GPS, incidentes)
+  PMA_ACCIONES    // Ejecutar acciones PMA (bloquear, reembolsar, etc.)
+  LECTURA         // Consultar datos (stats, estados)
+}
+
+model ApiKey {
+  id            String        @id @default(cuid())
+  nombre        String        // Descripción legible: "Bot Jelou Producción"
+  prefijo       String        @unique // Parte visible del token: "tbk_live_a1b2c3d4"
+  hashToken     String        @unique // SHA-256 del token completo (nunca se guarda el token en claro)
+  scopes        ApiKeyScope[] @default([INGEST])
+
+  activa        Boolean       @default(true)
+  revocada      Boolean       @default(false)
+
+  ultimoUso     DateTime?
+  totalUsos     Int           @default(0)
+  expiraEn      DateTime?
+
+  creadaPorId   String?
+  creadaPor     AdminPMA?     @relation(fields: [creadaPorId], references: [id])
+
+  fechaCreacion DateTime      @default(now())
+
+  @@index([prefijo])
+  @@index([activa])
+}
+
+// ============================================
+// EVENTOS DE INGESTA (datos recibidos del bot)
+// ============================================
+// Registro append-only de cada payload recibido vía /api/v1/ingest,
+// para trazabilidad y reprocesamiento.
+
+model EventoIngesta {
+  id          String   @id @default(cuid())
+  tipo        String   // "carrera", "usuario", "ubicacion", "incidente", "pago"
+  apiKeyId    String?  // Qué key lo envió
+  payloadJson String   @db.Text
+  procesado   Boolean  @default(false)
+  error       String?  @db.Text
+  recursoId   String?  // ID del recurso creado/actualizado
+  timestamp   DateTime @default(now())
+
+  @@index([tipo])
+  @@index([timestamp])
+  @@index([procesado])
 }
 
 // ============================================

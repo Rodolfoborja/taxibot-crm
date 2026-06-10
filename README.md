@@ -224,26 +224,60 @@ Las API keys para Jelou, Deuna y WhatsApp deben estar en `.env` y **nunca** en e
 - Ejecutar reembolsos
 - Historial de transacciones
 
-### Webhook PMA Utils
-Endpoint: `POST /api/pma/ejecutar-accion`
+## 🔌 API pública v1 (integración con el bot / Jelou)
+
+El bot de WhatsApp (Jelou) se integra con el CRM mediante **API keys**. Genera y
+revoca las keys desde el panel: **Ajustes → API Keys** (`/ajustes/api-keys`).
+El token se muestra **una sola vez** al crearlo; solo se guarda su hash SHA-256.
+
+Autenticación (cualquiera de las dos):
+
+```
+Authorization: Bearer <token>
+X-API-Key: <token>
+```
+
+Scopes disponibles: `INGEST` (enviar datos), `PMA_ACCIONES` (ejecutar acciones), `LECTURA`.
+
+### 1. Ingesta de datos — `POST /api/v1/ingest`  (scope `INGEST`)
+
+El bot envía datos al CRM. Body: `{ "tipo": "...", "data": { ... } }`.
 
 ```bash
-curl -X POST https://crm.tudominio.com/api/pma/ejecutar-accion \
-  -H "X-API-Key: tu_api_key" \
+# Sincronizar un usuario
+curl -X POST https://taxibot.dev.rodolfoborja.com/api/v1/ingest \
+  -H "Authorization: Bearer $TAXIBOT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{
-    "accion": "bloquear_conductor",
-    "conductorId": "conductor_123",
-    "motivo": "Denuncia grave"
-  }'
+  -d '{ "tipo": "usuario", "data": {
+        "telefono": "+593999999999", "nombre": "Juan Pérez", "tipo": "CLIENTE" } }'
+
+# Actualizar GPS de un conductor
+curl -X POST https://taxibot.dev.rodolfoborja.com/api/v1/ingest \
+  -H "Authorization: Bearer $TAXIBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "tipo": "ubicacion", "data": {
+        "telefonoConductor": "+593988888888", "lat": -2.17, "lng": -79.92, "disponible": true } }'
+```
+
+Tipos de ingesta: `usuario`, `carrera`, `ubicacion`, `incidente`.
+
+### 2. Acciones PMA — `POST /api/v1/pma/ejecutar-accion`  (scope `PMA_ACCIONES`)
+
+```bash
+curl -X POST https://taxibot.dev.rodolfoborja.com/api/v1/pma/ejecutar-accion \
+  -H "Authorization: Bearer $TAXIBOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "accion": "bloquear_conductor", "conductorId": "...", "motivo": "Denuncia grave" }'
 ```
 
 Acciones disponibles:
-- `reembolsar`
-- `bloquear_conductor`
-- `desbloquear_usuario`
-- `cancelar_carrera_forzada`
-- `consultar_gps`
+- `reembolsar` → requiere `carreraId`
+- `bloquear_conductor` → requiere `conductorId`
+- `desbloquear_usuario` → requiere `usuarioId`
+- `cancelar_carrera_forzada` → requiere `carreraId`
+- `consultar_gps` → requiere `conductorId`
+
+Toda acción PMA queda registrada en `LogAuditoria`. Cada payload de ingesta queda en `EventoIngesta`.
 
 ## 🛠️ Comandos útiles
 
