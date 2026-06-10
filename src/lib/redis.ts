@@ -9,9 +9,10 @@ export const redis =
   new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
     // Conexión perezosa: no abre el socket hasta el primer comando.
     // Evita el ruido de ECONNREFUSED en build/arranque si Redis no está listo.
+    // enableOfflineQueue (default true): encola el primer comando hasta que la
+    // conexión perezosa se establezca, en vez de fallar de inmediato.
     lazyConnect: true,
     maxRetriesPerRequest: 2,
-    enableOfflineQueue: false,
     retryStrategy: (times) => Math.min(times * 50, 2000),
   })
 

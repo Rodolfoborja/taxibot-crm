@@ -35,4 +35,4 @@ ENV NODE_ENV=production
 # tablas/columnas que falten (incl. ApiKey y EventoIngesta) sin depender del
 # estado del historial de migraciones. Si falla, el contenedor no arranca
 # (no deja la BD a medias).
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npm start"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node prisma/seed.mjs && npm start"]
