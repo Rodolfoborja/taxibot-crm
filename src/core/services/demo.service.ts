@@ -218,6 +218,52 @@ export async function seedDemo() {
     }
   }
 
+  // ---- Carreras BUSCANDO (sin conductor) para el tablero de Despacho ----
+  let carrerasBuscando = 0
+  for (let k = 0; k < 3; k++) {
+    const cliente = clientes[(k + 2) % clientes.length]
+    const destino = destinos[k % destinos.length]
+    const origen = { lat: jitter(CENTRO.lat), lng: jitter(CENTRO.lng) }
+    const distancia = 2 + Math.random() * 6
+    await prisma.carrera.create({
+      data: {
+        usuarioId: cliente.id,
+        conductorId: null,
+        origenLat: origen.lat,
+        origenLng: origen.lng,
+        origenDireccion: `Av. ${k + 1} de Mayo y Calle ${20 + k}`,
+        destinoLat: destino.lat,
+        destinoLng: destino.lng,
+        destinoDireccion: destino.dir,
+        distanciaKm: +distancia.toFixed(2),
+        costoEstimado: +(1.5 + distancia * 0.45).toFixed(2),
+        estado: 'BUSCANDO',
+        fechaSolicitud: new Date(Date.now() - (k + 1) * 120000),
+      },
+    })
+    carrerasBuscando++
+  }
+
+  // ---- Mensajes de soporte ENTRANTES (ayuda / info) sin responder ----
+  const soporteMsgs = [
+    { i: 2, texto: '¿Tienen servicio hasta Samborondón?' },
+    { i: 3, texto: 'Necesito ayuda, el conductor no ha llegado y ya esperé 20 min.' },
+    { i: 5, texto: '¿Cuánto cuesta del centro al aeropuerto?' },
+  ]
+  for (const sm of soporteMsgs) {
+    const cliente = clientes[sm.i]
+    await prisma.mensaje.create({
+      data: {
+        telefono: cliente.telefono,
+        nombre: cliente.nombre,
+        direccion: 'ENTRANTE',
+        texto: sm.texto,
+        estado: 'ENTREGADO',
+        timestamp: new Date(Date.now() - Math.floor(Math.random() * 30 + 1) * 60000),
+      },
+    })
+  }
+
   // ---- Incidentes ----
   const carrerasParaIncidente = await prisma.carrera.findMany({
     where: { usuarioId: { in: clientes.map((c) => c.id) } },
@@ -250,6 +296,7 @@ export async function seedDemo() {
     conductores: conductores.length,
     clientes: clientes.length,
     carrerasActivas,
+    carrerasBuscando,
     mensaje: 'Datos de demo insertados.',
   }
 }

@@ -6,10 +6,12 @@ import { useState } from 'react'
 import {
   LayoutDashboard,
   Radio,
+  ClipboardList,
   Car,
   Users,
   Contact,
   AlertTriangle,
+  LifeBuoy,
   CreditCard,
   KeyRound,
   DatabaseZap,
@@ -19,10 +21,12 @@ import { cn } from '@/lib/utils'
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/monitor', label: 'Monitor en vivo', icon: Radio },
+  { href: '/despacho', label: 'Despacho', icon: ClipboardList },
   { href: '/carreras', label: 'Carreras', icon: Car },
   { href: '/conductores', label: 'Conductores', icon: Contact },
   { href: '/usuarios', label: 'Usuarios', icon: Users },
   { href: '/incidentes', label: 'Incidentes', icon: AlertTriangle },
+  { href: '/soporte', label: 'Soporte', icon: LifeBuoy },
   { href: '/pagos', label: 'Pagos', icon: CreditCard },
   { href: '/ajustes/api-keys', label: 'API Keys', icon: KeyRound },
 ]

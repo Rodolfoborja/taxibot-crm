@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { Send, X, Navigation, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -37,10 +38,17 @@ interface Mensaje {
   timestamp: string
 }
 
-function colorConductor(c: Conductor) {
-  if (c.carreraActivaId) return '#2563eb' // en carrera → azul
-  if (c.disponible) return '#16a34a' // disponible → verde
-  return '#9ca3af' // ocupado/offline → gris
+/** Pin con emoji estilo "gota" (Leaflet divIcon). */
+function pinIcon(emoji: string, bg: string) {
+  return L.divIcon({
+    className: 'taxibot-pin',
+    html: `<div style="background:${bg};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">
+             <span style="transform:rotate(45deg);font-size:15px;line-height:1">${emoji}</span>
+           </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+    popupAnchor: [0, -28],
+  })
 }
 
 /** Reencuadra el mapa cuando cambian los conductores (solo la 1ª vez con datos). */
@@ -71,6 +79,17 @@ export default function MapaLive() {
   // Destinatario actual de la comunicación
   const destTelefono = dest === 'cliente' ? sel?.clienteTelefono ?? null : sel?.telefono ?? null
   const destNombre = dest === 'cliente' ? sel?.clienteNombre ?? 'Cliente' : sel?.nombre ?? 'Conductor'
+
+  const iconos = useMemo(
+    () => ({
+      taxiAzul: pinIcon('🚕', '#2563eb'),
+      taxiVerde: pinIcon('🚕', '#16a34a'),
+      taxiGris: pinIcon('🚕', '#9ca3af'),
+      cliente: pinIcon('🧍', '#0ea5e9'),
+      destino: pinIcon('🏁', '#dc2626'),
+    }),
+    []
+  )
 
   // Polling de conductores
   useEffect(() => {
@@ -155,33 +174,32 @@ export default function MapaLive() {
 
         {conductores.map((c) =>
           c.lat && c.lng ? (
-            <CircleMarker
+            <Marker
               key={c.conductorId}
-              center={[c.lat, c.lng]}
-              radius={9}
-              pathOptions={{ color: '#fff', weight: 2, fillColor: colorConductor(c), fillOpacity: 1 }}
+              position={[c.lat, c.lng]}
+              icon={c.carreraActivaId ? iconos.taxiAzul : c.disponible ? iconos.taxiVerde : iconos.taxiGris}
               eventHandlers={{ click: () => { setSel(c); setDest('conductor') } }}
             >
               <Popup>
-                <strong>{c.nombre}</strong> · {c.placa}
+                <strong>🚕 {c.nombre}</strong> · {c.placa}
                 <br />
                 {c.carreraEstado ? `En carrera (${c.carreraEstado})` : c.disponible ? 'Disponible' : 'Ocupado'}
               </Popup>
-            </CircleMarker>
+            </Marker>
           ) : null
         )}
 
         {/* Trayectoria del seleccionado */}
         {ruta.length > 1 && <Polyline positions={ruta} pathOptions={{ color: '#2563eb', weight: 4, opacity: 0.8 }} />}
         {extremos?.origen && (
-          <CircleMarker center={[extremos.origen.lat, extremos.origen.lng]} radius={7} pathOptions={{ color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 }}>
-            <Popup>Origen: {extremos.origen.direccion}</Popup>
-          </CircleMarker>
+          <Marker position={[extremos.origen.lat, extremos.origen.lng]} icon={iconos.cliente}>
+            <Popup>👤 Cliente / Origen: {extremos.origen.direccion}</Popup>
+          </Marker>
         )}
         {extremos?.destino && (
-          <CircleMarker center={[extremos.destino.lat, extremos.destino.lng]} radius={7} pathOptions={{ color: '#fff', weight: 2, fillColor: '#dc2626', fillOpacity: 1 }}>
-            <Popup>Destino: {extremos.destino.direccion}</Popup>
-          </CircleMarker>
+          <Marker position={[extremos.destino.lat, extremos.destino.lng]} icon={iconos.destino}>
+            <Popup>🏁 Destino: {extremos.destino.direccion}</Popup>
+          </Marker>
         )}
       </MapContainer>
 
